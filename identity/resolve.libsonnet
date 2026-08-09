@@ -13,38 +13,33 @@
 
   // ---- environment label grammar -------------------------------------------
   //
-  // A label is `<prefix>` or `<prefix>-<tenant>`. The tenant part may itself
-  // contain hyphens, so the split is on the FIRST hyphen only: `stg-big-corp`
-  // parses as (stg, big-corp), not (stg, big).
+  // The grammar belongs to the identity profile, because it is exactly what
+  // varies between deployments: one folds the tenant into the label, another
+  // has no tenant at all. These two forward to it so callers holding only a
+  // profile do not need a second import.
   //
-  // This is the single definition of the grammar. The same split is applied in
-  // SQL by sql.libsonnet's envPrefixExpr/envTenantExpr, and in Python by
-  // scripts/labels.py, so the three cannot disagree.
-  parseLabel(envLabel)::
-    local hits = std.findSubstr('-', envLabel);
-    if std.length(hits) == 0 then
-      { prefix: envLabel, tenant: null }
-    else
-      { prefix: envLabel[0:hits[0]], tenant: envLabel[hits[0] + 1:] },
+  // Kept as the single definition. sql.libsonnet's envPrefixExpr and
+  // envTenantExpr apply the same split in SQL, and the two must agree.
+  parseLabel(profile, envLabel):: profile.parseLabel(envLabel),
 
-  envLabel(environment, tenant):: environment + '-' + tenant,
+  envLabel(profile, environment, tenant):: profile.composeLabel(environment, tenant),
 
   // ---- rules ---------------------------------------------------------------
 
   // First rule whose prefix matches, or null. Matches an exact prefix (`prod`)
   // or the prefix followed by a hyphen (`prod-acme`) — never a bare
   // string-prefix, so `production` does not match the `prod` rule.
-  envRule(cfg, envLabel)::
-    local p = r.parseLabel(envLabel).prefix;
+  envRule(cfg, profile, envLabel)::
+    local p = profile.parseLabel(envLabel).prefix;
     local hits = [rule for rule in cfg.environments.rules if rule.prefix == p];
     if std.length(hits) == 0 then null else hits[0],
 
   // Which target does this (envLabel, tenant) land on?
-  targetName(cfg, envLabel, tenant)::
-    local rule = r.envRule(cfg, envLabel);
+  targetName(cfg, profile, envLabel, tenant)::
+    local rule = r.envRule(cfg, profile, envLabel);
     if rule == null then
-      error 'no environment rule matches label %s (prefix %s). Add one to config/environments.yaml.'
-            % [envLabel, r.parseLabel(envLabel).prefix]
+      error 'no environment rule matches label %s (prefix %s). Add one to the environment rules.'
+            % [envLabel, profile.parseLabel(envLabel).prefix]
     else if rule.target == 'non-prod' then
       cfg.non_prod_target
     else if rule.target == 'per-tenant-region' then
@@ -58,17 +53,17 @@
           if cfg.targets[name].region == region
         ];
         if std.length(matches) == 0 then
-          error 'tenant %s has prod_region %s, but no target in config/targets.yaml serves that region'
+          error 'tenant %s has prod_region %s, but no configured target serves that region'
                 % [tenant.tenant, region]
         else matches[0]
     else
-      error 'unknown target directive %s in config/environments.yaml' % rule.target,
+      error 'unknown target directive %s in the environment rules' % rule.target,
 
   // The full binding for one (tenant, environment) instance.
-  binding(cfg, tenant, environment)::
-    local envLabel = r.envLabel(environment, tenant.tenant);
-    local rule = r.envRule(cfg, envLabel);
-    local targetName = r.targetName(cfg, envLabel, tenant);
+  binding(cfg, profile, tenant, environment)::
+    local envLabel = profile.composeLabel(environment, tenant.tenant);
+    local rule = r.envRule(cfg, profile, envLabel);
+    local targetName = r.targetName(cfg, profile, envLabel, tenant);
     local target = cfg.targets[targetName];
     local ds = std.get(target.datasources, rule.database, null);
     if ds == null then
@@ -86,17 +81,46 @@
 
   // ---- the instance matrix -------------------------------------------------
 
-  // Every (tenant, environment) pair, resolved. This is what `scoped` renders over.
-  instances(cfg):: std.flattenArrays([
-    [r.binding(cfg, t, env) for env in t.environments]
-    for t in cfg.tenants
-  ]),
+  // A binding for a deployment with no tenant axis. The label IS the
+  // environment, and every environment lands on the one configured target.
+  environmentBinding(cfg, profile, environment)::
+    local envLabel = profile.composeLabel(environment, null);
+    local rule = r.envRule(cfg, profile, envLabel);
+    if rule == null then
+      error 'no environment rule matches %s. Add one to the environment rules.' % envLabel
+    else
+      local targetName = cfg.non_prod_target;
+      local target = cfg.targets[targetName];
+      local ds = std.get(target.datasources, rule.database, null);
+      if ds == null then
+        error 'target %s has no datasource for database %s, needed by %s'
+              % [targetName, rule.database, envLabel]
+      else {
+        tenant: null,
+        environment: environment,
+        envLabel: envLabel,
+        database: rule.database,
+        targetName: targetName,
+        target: target { name: targetName },
+        datasourceUid: ds,
+      },
+
+  // Everything `scoped` renders over. With a tenant axis that is every
+  // (tenant, environment) pair; without one it is simply every environment.
+  instances(cfg, profile)::
+    if profile.hasTenant then
+      std.flattenArrays([
+        [r.binding(cfg, profile, t, env) for env in t.environments]
+        for t in cfg.tenants
+      ])
+    else
+      [r.environmentBinding(cfg, profile, env) for env in cfg.environment_names],
 
   // Distinct (target, database) pairs — what `browse` and data-querying `global`
   // assets render over. Derived from the instance matrix rather than declared, so
   // a target only gets a browse asset for a database some tenant actually uses.
-  databaseScopes(cfg)::
-    local insts = r.instances(cfg);
+  databaseScopes(cfg, profile)::
+    local insts = r.instances(cfg, profile);
     local keys = std.set([i.targetName + '/' + i.database for i in insts]);
     [
       local parts = std.splitLimit(k, '/', 1);
@@ -109,7 +133,7 @@
         // Which environment prefixes this database scope actually contains —
         // the option list for the browse `$env` variable.
         envPrefixes: std.set([
-          r.parseLabel(i.envLabel).prefix
+          profile.parseLabel(i.envLabel).prefix
           for i in insts
           if i.targetName == parts[0] && i.database == parts[1]
         ]),
@@ -122,7 +146,7 @@
 
   // ---- thresholds ----------------------------------------------------------
 
-  // Precedence: tenant's per-environment override > config/defaults.yaml.
+  // Precedence: the tenant's per-environment override, then the default.
   threshold(cfg, tenant, environment, key)::
     local envOverrides = std.get(std.get(tenant, 'thresholds', {}), environment, {});
     std.get(envOverrides, key, std.get(cfg.defaults.thresholds, key, null)),

@@ -28,7 +28,11 @@
 
   // ---- scoped: one asset per (tenant, environment) instance ----------------
   scopedFolderUid(envLabel):: n.clamp('t-' + n.slug(envLabel)),
-  scopedFolderTitle(tenant, environment):: n.titleCase(tenant) + ' / ' + environment,
+  // With no tenant axis the environment is the whole identity, so a `Foo / bar`
+  // title would read as a missing value rather than an absent dimension.
+  scopedFolderTitle(tenant, environment)::
+    if tenant == null then n.titleCase(environment)
+    else n.titleCase(tenant) + ' / ' + environment,
   scopedUid(envLabel, template):: n.clamp(n.slug(envLabel) + '-' + n.slug(template)),
 
   // ---- browse: one asset per (target, database) scope ----------------------

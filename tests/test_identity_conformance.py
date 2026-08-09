@@ -27,7 +27,7 @@ CONTRACT = [
     "tenantVariableQuery",
 ]
 
-PROFILES = ["labelSuffix", "tenantAttribute"]
+PROFILES = ["environmentOnly", "labelSuffix", "tenantAttribute"]
 
 P = "local p = import 'identity/profiles/init.libsonnet'; "
 
@@ -46,7 +46,10 @@ def test_profile_implements_contract(profile):
     assert not missing, f"{profile} is missing {missing}"
 
 
-@pytest.mark.parametrize("profile", PROFILES)
+TENANTED = ["labelSuffix", "tenantAttribute"]
+
+
+@pytest.mark.parametrize("profile", TENANTED)
 def test_parse_and_compose_round_trip(profile):
     """composeLabel then parseLabel must recover the parts."""
     got = jsonnet_eval(
@@ -91,7 +94,7 @@ def test_browse_split_distinguishes_selected_tenants():
     assert jsonnet_eval(P + "p.labelSuffix.browseSplit") == "ResourceAttributes['environment']"
 
 
-@pytest.mark.parametrize("profile", PROFILES)
+@pytest.mark.parametrize("profile", TENANTED)
 def test_tenant_variable_query_is_bounded_and_indexed(profile):
     q = jsonnet_eval(P + f"p.{profile}.tenantVariableQuery({DB_SCOPE}, 'up')")
     assert "INTERVAL" in q, "a dropdown query must use a short fixed window"

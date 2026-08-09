@@ -35,7 +35,11 @@ CFG = """{
   ],
 }"""
 
-R = "local r = import 'identity/resolve.libsonnet'; local c = %s; " % CFG
+# These fixtures use the label-suffix convention, so that is the profile under
+# test here. The tenant-free path has its own suite.
+R = ("local r = import 'identity/resolve.libsonnet';"
+     " local prof = (import 'identity/profiles/init.libsonnet').labelSuffix;"
+     " local c = %s; " % CFG)
 N = "local n = import 'core/naming.libsonnet'; "
 
 
@@ -59,7 +63,7 @@ def test_label_splits_on_the_first_hyphen(label, prefix, tenant):
     """A hyphenated tenant name mis-attributed on one side only is the kind of
     bug that shows up as one tenant's dashboard quietly querying another's."""
     got = jsonnet_eval(
-        "local r = import 'identity/resolve.libsonnet'; r.parseLabel('%s')" % label
+        R + "r.parseLabel(prof, '%s')" % label
     )
     assert got["prefix"] == prefix
     assert got["tenant"] == tenant
@@ -72,7 +76,7 @@ def test_non_prod_lands_on_the_non_prod_target():
     """Non-production exists on one target whatever the tenant's prod_region."""
     for tenant in ("acme", "big-corp"):
         got = jsonnet_eval(
-            R + "r.targetName(c, 'stg-%s', r.tenantByName(c, '%s'))" % (tenant, tenant)
+            R + "r.targetName(c, prof, 'stg-%s', r.tenantByName(c, '%s'))" % (tenant, tenant)
         )
         assert got == "scout-a", f"stg-{tenant} resolved to {got}, not the non-prod target"
 
@@ -80,14 +84,14 @@ def test_non_prod_lands_on_the_non_prod_target():
 def test_prod_follows_the_tenants_region():
     for tenant, region in (("acme", "eu-west-1"), ("big-corp", "us-east-1")):
         got = jsonnet_eval(
-            R + "r.targetName(c, 'prod-%s', r.tenantByName(c, '%s'))" % (tenant, tenant)
+            R + "r.targetName(c, prof, 'prod-%s', r.tenantByName(c, '%s'))" % (tenant, tenant)
         )
         assert jsonnet_eval(R + "c.targets['%s'].region" % got) == region
 
 
 def test_every_instance_resolves_a_datasource():
     """A missing datasource renders a panel with an empty uid, which fails silently."""
-    instances = jsonnet_eval(R + "r.instances(c)")
+    instances = jsonnet_eval(R + "r.instances(c, prof)")
     assert len(instances) == 4
     for i in instances:
         assert i["datasourceUid"], f"{i['envLabel']} has no datasource"

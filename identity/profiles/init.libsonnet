@@ -6,6 +6,7 @@
 // profile missing a member renders a query with no environment predicate
 // rather than failing.
 {
+  environmentOnly: import 'environment_only.libsonnet',
   labelSuffix: import 'label_suffix.libsonnet',
   tenantAttribute: import 'tenant_attribute.libsonnet',
 }
