@@ -1,0 +1,6 @@
+# Pinned toolchain. Versions change render output, so they are not advisory:
+# go-jsonnet renders `0.6` as `0.59999999999999998` where C++ jsonnet emits `0.6`.
+[tools]
+"go-jsonnet" = "0.20.0"
+python = "3.12"
+uv = "latest"

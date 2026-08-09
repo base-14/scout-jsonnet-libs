@@ -1,0 +1,8 @@
+[project]
+name = "scout-jsonnet-libs-tests"
+version = "0.0.0"
+requires-python = ">=3.12"
+dependencies = ["pytest>=8.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
