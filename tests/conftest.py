@@ -15,9 +15,17 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def jsonnet_eval(expr: str):
-    """Evaluate a jsonnet expression with the library on the search path."""
+    """Evaluate a jsonnet expression with the library on the search path.
+
+    On failure the raised message carries jsonnet's stderr. Several of these
+    tests assert on the wording of a deliberate `error`, and
+    CalledProcessError's own message shows only the exit status — which would
+    make those assertions pass or fail for the wrong reason.
+    """
     out = subprocess.run(
         ["jsonnet", "-J", str(ROOT), "-e", expr],
-        check=True, cwd=ROOT, capture_output=True, text=True,
+        cwd=ROOT, capture_output=True, text=True,
     )
+    if out.returncode != 0:
+        raise RuntimeError(out.stderr.strip())
     return json.loads(out.stdout)

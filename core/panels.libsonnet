@@ -11,8 +11,16 @@ local manifest = import 'manifest.libsonnet';
 {
   local p = self,
 
+  // Defaults for the Scout release this library was cut against. A consumer
+  // pins its own with withCompat rather than editing them here.
   pluginVersion:: '12.4.3',
   schemaVersion:: 42,
+
+  // Bind this module to a Scout version's constants.
+  withCompat(c):: self {
+    pluginVersion:: c.pluginVersion,
+    schemaVersion:: c.schemaVersion,
+  },
 
   datasource(uid):: { type: manifest.datasourceType, uid: uid },
 

@@ -23,6 +23,9 @@
     alertRuleGroup: 'alerting.ext.grafana.app/v1alpha1',
   },
 
+  // Bind this module to a Scout version's resource API versions.
+  withCompat(c):: self { apiVersions:: c.apiVersions },
+
   // Annotation carrying a dashboard's folder placement.
   folderAnnotation:: 'grafana.app/folder',
 
