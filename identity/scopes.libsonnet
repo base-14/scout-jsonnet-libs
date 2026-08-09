@@ -10,40 +10,37 @@ local ch = import '../core/sql.libsonnet';
 {
   local s = self,
 
-  // ---- tenancy: which convention a template's metrics follow ---------------
+  // ---- identity ------------------------------------------------------------
   //
-  // Two conventions can coexist in one deployment, split by tech stack:
+  // `profile` decides how an environment — and optionally a tenant — is
+  // identified. It is passed in rather than chosen here, because one deployment
+  // can span more than one convention: one template's metrics may fold the
+  // tenant into the environment label while another's carry it as a separate
+  // resource attribute.
   //
-  //   'label'      the tenant is folded into a suffixed environment label
-  //                (`stg-acme`), with no `tenant` resource attribute at all.
-  //   'attribute'  `environment` holds the bare tier (`stg`) and the tenant
-  //                is carried separately as ResourceAttributes['tenant'].
+  // Declared by the caller, never inferred. Inferring it — say, from whether a
+  // metric happens to carry `tenant` — would silently pick the wrong convention
+  // for some panels of a template that mixes both. Declaring makes it one
+  // reviewable line.
   //
-  // Declared per template via `tenancy: 'attribute'|'label'`, the same way
-  // `mode: global` is declared rather than inferred — see `global` below. If it
-  // were inferred (say, from whether a metric happens to carry `tenant`), a
-  // template mixing both conventions across its panels would silently pick the
-  // wrong one for some of them. Declaring it instead makes the choice a single,
-  // reviewable line, and a template that is never migrated keeps working under
-  // 'label' by default.
-  local ATTRIBUTE = 'attribute',
+  // See identity/profiles/ for the built-ins and the contract a custom profile
+  // must satisfy.
 
-  // ---- scoped: pinned to one (tenant, environment) instance ----------------
-  scoped(binding, tenancy='label'):: {
+  // ---- scoped: pinned to one instance --------------------------------------
+  scoped(binding, profile):: {
     mode: 'scoped',
     database: binding.database,
     datasourceUid: binding.datasourceUid,
     envLabel: binding.envLabel,
     tenant: binding.tenant,
     environment: binding.environment,
-    tenancy:: tenancy,
-    // Index-friendly exact match. Under 'attribute' tenancy the label itself
-    // (`stg-acme`) never appears in the data — the bare tier and the tenant are
-    // two separate columns, so both must be pinned.
-    envPredicate::
-      if tenancy == ATTRIBUTE
-      then ch.envAttrEquals(binding.environment, binding.tenant)
-      else ch.envEquals(binding.envLabel),
+    // Exposed so a template can reach browseSplit/browseSplitSelect without
+    // branching on a convention name.
+    profile:: profile,
+    // Index-friendly exact match. What "pinned" means is the profile's call:
+    // under a separate-tenant-attribute convention the composed label never
+    // appears in the data, so both columns have to be constrained.
+    envPredicate:: profile.scopedPredicate(binding),
     // No variables: everything is baked in, which is the point.
     variables:: [],
     // Labels stamped on alert rules for notification routing.
@@ -55,36 +52,28 @@ local ch = import '../core/sql.libsonnet';
   // Cannot span databases: a deployment may put production and non-production
   // telemetry in different databases, and a panel target's database is fixed.
   // Hence one browse asset per database scope, not one globally.
-  browse(dbScope, probeMetric, tenancy='label'):: {
+  browse(dbScope, probeMetric, profile):: {
     mode: 'browse',
     database: dbScope.database,
     datasourceUid: dbScope.datasourceUid,
     envPrefixes: dbScope.envPrefixes,
-    tenancy:: tenancy,
-    // Under 'label' tenancy `$tenant` carries the FULL label as its value while
-    // displaying the bare tenant name, so this stays a simple map equality the
-    // bloom filter can use. The alternative — position()/substring() predicates
-    // in every panel — is correct but forces a full column read per panel.
-    //
-    // Under 'attribute' tenancy environment and tenant are independent columns,
-    // so both dropdowns filter their own.
-    envPredicate::
-      if tenancy == ATTRIBUTE
-      then ch.envAttrIn('env', 'tenant')
-      else ch.envIn('tenant'),
-    variables:: [
-      s.envVariable(dbScope, probeMetric, tenancy),
-      s.tenantVariable(dbScope, probeMetric, tenancy),
-    ],
+    profile:: profile,
+    envPredicate:: profile.browsePredicate('env', 'tenant'),
+    variables:: [s.envVariable(dbScope, probeMetric, profile)]
+                + (
+                  if profile.hasTenant
+                  then [s.tenantVariable(dbScope, probeMetric, profile)]
+                  else []
+                ),
     labels:: {},
   },
 
   // ---- global: tenant-agnostic ---------------------------------------------
   //
-  // The ONLY mode exempt from "every query filters its environment label", and
-  // the exemption is declared by the template rather than inferred from a missing
-  // predicate. If it were inferred, a scoped template with a forgotten predicate
-  // would read as global, pass lint, and expose every tenant's data.
+  // The ONLY mode exempt from "every query filters its environment", and the
+  // exemption is declared by the template rather than inferred from a missing
+  // predicate. If it were inferred, a scoped template with a forgotten
+  // predicate would read as global, pass lint, and expose every tenant's data.
   global(target, database=null, datasourceUid=null):: {
     mode: 'global',
     database: database,
@@ -99,16 +88,12 @@ local ch = import '../core/sql.libsonnet';
 
   // ---- browse variables ----------------------------------------------------
 
-  // The environment prefix, restricted to what this database scope holds: the
-  // non-production prefixes for the non-production database, and so on.
+  // The environment axis, restricted to what this database scope holds.
   //
-  // Under 'label' tenancy the value in ResourceAttributes['environment'] is the
-  // full suffixed label, so the prefix has to be extracted. Under 'attribute'
-  // tenancy the column already holds the bare tier — that IS the value — so no
-  // extraction is needed or correct: envPrefixExpr splits on the first hyphen,
-  // and a bare `stg` has none, but a tenant name containing one (`big-corp`)
-  // would silently truncate.
-  envVariable(dbScope, probeMetric, tenancy='label'):: {
+  // Whether the column needs a prefix extracted is the profile's call: if it
+  // already holds the bare tier, extracting would truncate a tenant name that
+  // contains a hyphen.
+  envVariable(dbScope, probeMetric, profile):: {
     name: 'env',
     label: 'Environment',
     type: 'query',
@@ -120,7 +105,7 @@ local ch = import '../core/sql.libsonnet';
     refresh: 1,
     datasource: { type: manifest.datasourceType, uid: dbScope.datasourceUid },
     query: std.join('\n', [
-      'SELECT DISTINCT ' + (if tenancy == ATTRIBUTE then ch.resAttr('environment') else ch.envPrefixExpr) + ' AS env',
+      'SELECT DISTINCT ' + profile.envVariableExpr + ' AS env',
       ch.from(dbScope.database, ch.tables.gauge),
       ch.where([ch.variableWindow] + ch.metricPredicates(probeMetric)),
       'ORDER BY env',
@@ -130,14 +115,10 @@ local ch = import '../core/sql.libsonnet';
     hide: 0,
   },
 
-  // Under 'label' tenancy this is chained off $env: displays `acme`, returns
-  // `stg-acme`, and the predicate below is a single ResourceAttributes['environment']
-  // equality using that full value.
-  //
-  // Under 'attribute' tenancy `tenant` is its own resource attribute, entirely
-  // independent of the environment column, so this reads it directly instead of
-  // deriving anything from the environment label.
-  tenantVariable(dbScope, probeMetric, tenancy='label'):: {
+  // Rendered only when the profile has a tenant axis. What the dropdown's value
+  // means — a bare tenant name, or a full composed label — is the profile's
+  // decision, so the whole query comes from there.
+  tenantVariable(dbScope, probeMetric, profile):: {
     name: 'tenant',
     label: 'Tenant',
     type: 'query',
@@ -146,25 +127,7 @@ local ch = import '../core/sql.libsonnet';
     allValue: null,
     refresh: 1,
     datasource: { type: manifest.datasourceType, uid: dbScope.datasourceUid },
-    query:
-      if tenancy == ATTRIBUTE then
-        std.join('\n', [
-          'SELECT DISTINCT ' + ch.resTenant + ' AS tenant',
-          ch.from(dbScope.database, ch.tables.gauge),
-          ch.where([ch.variableWindow] + ch.metricPredicates(probeMetric)
-                   + [ch.resAttr('environment') + ' IN (${env:singlequote})']),
-          'ORDER BY tenant',
-        ]) + '\n'
-      else
-        std.join('\n', [
-          'SELECT DISTINCT',
-          '  ' + ch.envTenantExpr + ' AS __text,',
-          "  ResourceAttributes['environment'] AS __value",
-          ch.from(dbScope.database, ch.tables.gauge),
-          ch.where([ch.variableWindow] + ch.metricPredicates(probeMetric)
-                   + [ch.envPrefixExpr + ' IN (${env:singlequote})']),
-          'ORDER BY __text',
-        ]) + '\n',
+    query: profile.tenantVariableQuery(dbScope, probeMetric),
     current: {},
     options: [],
     hide: 0,

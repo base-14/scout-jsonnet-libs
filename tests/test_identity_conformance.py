@@ -96,3 +96,37 @@ def test_tenant_variable_query_is_bounded_and_indexed(profile):
     q = jsonnet_eval(P + f"p.{profile}.tenantVariableQuery({DB_SCOPE}, 'up')")
     assert "INTERVAL" in q, "a dropdown query must use a short fixed window"
     assert "MetricName = 'up'" in q, "must narrow on the primary index"
+
+
+# ---- scopes must delegate, not branch --------------------------------------
+
+S = "local s = import 'identity/scopes.libsonnet'; " + P
+
+
+@pytest.mark.parametrize(
+    "profile,expected",
+    [
+        ("labelSuffix", "ResourceAttributes['environment'] = 'stg-acme'"),
+        ("tenantAttribute", "ResourceAttributes['tenant'] = 'acme'"),
+    ],
+)
+def test_scoped_delegates_to_the_profile(profile, expected):
+    got = jsonnet_eval(S + f"s.scoped({BINDING}, p.{profile}).envPredicate")
+    assert expected in got
+
+
+def test_browse_exposes_the_profile_to_templates():
+    """A template must be able to reach browseSplit without branching on a name."""
+    got = jsonnet_eval(
+        S + f"s.browse({DB_SCOPE}, 'up', p.tenantAttribute).profile.browseSplit"
+    )
+    assert got == "ResourceAttributes['tenant']"
+
+
+def test_browse_omits_the_tenant_dropdown_without_a_tenant_axis():
+    names = jsonnet_eval(
+        S + "local prof = p.tenantAttribute { hasTenant:: false,"
+            " tenantVariableQuery(d, m):: error 'must not be called' };"
+        f" [v.name for v in s.browse({DB_SCOPE}, 'up', prof).variables]"
+    )
+    assert names == ["env"]
