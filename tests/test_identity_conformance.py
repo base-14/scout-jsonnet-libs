@@ -27,7 +27,12 @@ CONTRACT = [
     "tenantVariableQuery",
 ]
 
-PROFILES = ["environmentOnly", "labelSuffix", "tenantAttribute"]
+PROFILES = ["environmentOnly", "environmentColumn", "labelSuffix", "tenantAttribute"]
+
+# Profiles with a pinned form. environmentColumn has none by design: its column
+# holds both the suffixed label and the bare tier, so a pinned literal matches
+# nothing for half of them — see the profile's scopedPredicate.
+SCOPEABLE = ["environmentOnly", "labelSuffix", "tenantAttribute"]
 
 P = "local p = import 'identity/profiles/init.libsonnet'; "
 
@@ -60,7 +65,7 @@ def test_parse_and_compose_round_trip(profile):
     assert got["tenant"] == "big-corp", "the split must be on the FIRST hyphen"
 
 
-@pytest.mark.parametrize("profile", PROFILES)
+@pytest.mark.parametrize("profile", SCOPEABLE)
 def test_scoped_predicate_filters_the_environment(profile):
     """Whatever the convention, a pinned scope must constrain the environment."""
     got = jsonnet_eval(P + f"p.{profile}.scopedPredicate({BINDING})")
@@ -99,6 +104,27 @@ def test_tenant_variable_query_is_bounded_and_indexed(profile):
     q = jsonnet_eval(P + f"p.{profile}.tenantVariableQuery({DB_SCOPE}, 'up')")
     assert "INTERVAL" in q, "a dropdown query must use a short fixed window"
     assert "MetricName = 'up'" in q, "must narrow on the primary index"
+
+
+def test_environment_column_refuses_a_scoped_form():
+    """A refusal, not an omission — it must fail loudly rather than match nothing."""
+    with pytest.raises(Exception, match="no scoped form"):
+        jsonnet_eval(P + f"p.environmentColumn.scopedPredicate({BINDING})")
+
+
+def test_environment_column_reads_the_flat_column():
+    """The rollup has no attribute maps; a map lookup there returns nothing."""
+    pred = jsonnet_eval(P + "p.environmentColumn.browsePredicate('env', 'tenant')")
+    assert pred == "Environment IN (${env:singlequote})"
+    assert "ResourceAttributes" not in pred
+
+
+def test_environment_column_env_query_targets_the_rollup():
+    """It cannot use the default: a span rollup has no MetricName column."""
+    q = jsonnet_eval(P + f"p.environmentColumn.envVariableQuery({DB_SCOPE}, 'up')")
+    assert "otel_traces_apm" in q
+    assert "MetricName" not in q
+    assert "INTERVAL" in q, "a dropdown query must use a short fixed window"
 
 
 # ---- scopes must delegate, not branch --------------------------------------

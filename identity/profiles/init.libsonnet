@@ -7,6 +7,7 @@
 // rather than failing.
 {
   environmentOnly: import 'environment_only.libsonnet',
+  environmentColumn: import 'environment_column.libsonnet',
   labelSuffix: import 'label_suffix.libsonnet',
   tenantAttribute: import 'tenant_attribute.libsonnet',
 }
