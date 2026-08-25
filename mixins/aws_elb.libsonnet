@@ -166,7 +166,10 @@ local metricNames = [
         title=self.title,
         tags=['aws', 'elb'],
         variables=s.variables
-                  + [cw.dimVariable(s, 'loadBalancer', 'Load Balancer', lbDim,
+                  + [cw.dimVariable(s,
+                                    'loadBalancer',
+                                    'Load Balancer',
+                                    lbDim,
                                     metric('RequestCount'))],
         panels=panels(s),
       ),

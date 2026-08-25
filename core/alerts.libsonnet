@@ -17,7 +17,6 @@
 // template, no check, and no pipeline stage reaches into a rule's internals.
 // ============================================================================
 local manifest = import 'manifest.libsonnet';
-local ch = import 'sql.libsonnet';
 
 {
   local a = self,

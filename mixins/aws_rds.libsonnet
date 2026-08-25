@@ -155,7 +155,10 @@ local metricNames = [
         title=self.title,
         tags=['aws', 'rds'],
         variables=s.variables
-                  + [cw.dimVariable(s, 'dbInstance', 'DB Instance', instanceDim,
+                  + [cw.dimVariable(s,
+                                    'dbInstance',
+                                    'DB Instance',
+                                    instanceDim,
                                     metric('CPUUtilization'))],
         panels=panels(s),
       ),

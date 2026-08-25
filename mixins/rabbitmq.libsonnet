@@ -20,9 +20,9 @@
 //     and are retitled to what they measure.
 //   - rabbitmq.node.mem_used is bytes; the reference labelled the panel
 //     `short` while its disk sibling correctly used bytes.
-local ch = import '../core/sql.libsonnet';
 local manifest = import '../core/manifest.libsonnet';
 local p = import '../core/panels.libsonnet';
+local ch = import '../core/sql.libsonnet';
 
 local queueAttr = ch.resAttr('rabbitmq.queue.name');
 local nodeAttr = ch.resAttr('rabbitmq.node.name');
@@ -43,7 +43,11 @@ local target(s, query) =
 // A per-node line: gauges and management-API rates, read as the bucket max.
 local nodeSeries(s, metric) =
   target(s, ch.timeSeriesQuery(
-    s.database, ch.tables.sum, metric, 'max(Value)', 'value',
+    s.database,
+    ch.tables.sum,
+    metric,
+    'max(Value)',
+    'value',
     preds(s, metric),
     groupBy=[nodeAttr + ' AS node'],
   ));
@@ -55,7 +59,11 @@ local perQueueTotal(s, metric, extra=[]) =
     'SELECT t, sum(v) AS value',
     'FROM (',
     ch.indent(ch.timeSeriesQuery(
-      s.database, ch.tables.sum, metric, 'max(Value)', 'v',
+      s.database,
+      ch.tables.sum,
+      metric,
+      'max(Value)',
+      'v',
       preds(s, metric, extra),
       groupBy=[queueAttr + ' AS queue'],
     )),
@@ -66,7 +74,11 @@ local perQueueTotal(s, metric, extra=[]) =
 
 local distinctCount(s, metric, attr) =
   target(s, ch.timeSeriesQuery(
-    s.database, ch.tables.sum, metric, 'count(DISTINCT ' + attr + ')', 'value',
+    s.database,
+    ch.tables.sum,
+    metric,
+    'count(DISTINCT ' + attr + ')',
+    'value',
     preds(s, metric),
   ));
 
@@ -107,78 +119,119 @@ local serviceVariable(s) = {
 local statGrid(i) = { h: 6, w: 4, x: i * 4, y: 0 };
 
 local panels(s) = [
-  p.stat(1, 'Queues', statGrid(0),
+  p.stat(1,
+         'Queues',
+         statGrid(0),
          [distinctCount(s, 'rabbitmq.message.current', queueAttr)]),
-  p.stat(2, 'Consumers', statGrid(1),
+  p.stat(2,
+         'Consumers',
+         statGrid(1),
          [perQueueTotal(s, 'rabbitmq.consumer.count')]),
-  p.stat(3, 'Nodes', statGrid(2),
+  p.stat(3,
+         'Nodes',
+         statGrid(2),
          [distinctCount(s, 'rabbitmq.message.current', nodeAttr)]),
-  p.stat(4, 'Unacknowledged Messages', statGrid(3),
+  p.stat(4,
+         'Unacknowledged Messages',
+         statGrid(3),
          [perQueueTotal(s, 'rabbitmq.message.current', [stateIs('unacknowledged')])]),
-  p.stat(5, 'Ready Messages', statGrid(4),
+  p.stat(5,
+         'Ready Messages',
+         statGrid(4),
          [perQueueTotal(s, 'rabbitmq.message.current', [stateIs('ready')])]),
   // Channels created since node start — the receiver has no current-channels
   // gauge; kept from the reference with its meaning noted.
-  p.stat(6, 'Channels', statGrid(5),
+  p.stat(6,
+         'Channels',
+         statGrid(5),
          [target(s, ch.timeSeriesQuery(
-           s.database, ch.tables.sum, 'rabbitmq.node.channel_created',
-           'max(Value)', 'value',
+           s.database,
+           ch.tables.sum,
+           'rabbitmq.node.channel_created',
+           'max(Value)',
+           'value',
            preds(s, 'rabbitmq.node.channel_created'),
          ))]),
 
   p.row(7, 'Nodes', 6, collapsed=true, panels=[
-    p.timeseries(8, 'Memory Usage', { h: 8, w: 12, x: 0, y: 7 },
-                 [nodeSeries(s, 'rabbitmq.node.mem_used')], unit='bytes') + p.legend(),
-    p.timeseries(9, 'Free disk', { h: 8, w: 12, x: 12, y: 7 },
-                 [nodeSeries(s, 'rabbitmq.node.disk_free')], unit='bytes') + p.legend(),
+    p.timeseries(8,
+                 'Memory Usage',
+                 { h: 8, w: 12, x: 0, y: 7 },
+                 [nodeSeries(s, 'rabbitmq.node.mem_used')],
+                 unit='bytes') + p.legend(),
+    p.timeseries(9,
+                 'Free disk',
+                 { h: 8, w: 12, x: 12, y: 7 },
+                 [nodeSeries(s, 'rabbitmq.node.disk_free')],
+                 unit='bytes') + p.legend(),
   ]),
 
   p.row(10, 'Queued Messages', 7, collapsed=true, panels=[
-    p.timeseries(11, 'Messages ready to be delivered to consumers',
+    p.timeseries(11,
+                 'Messages ready to be delivered to consumers',
                  { h: 8, w: 12, x: 0, y: 8 },
                  [perQueueTotal(s, 'rabbitmq.message.current', [stateIs('ready')])],
                  unit='short') + p.legend(),
-    p.timeseries(12, 'Messages pending consumer acknowledgement',
+    p.timeseries(12,
+                 'Messages pending consumer acknowledgement',
                  { h: 8, w: 12, x: 12, y: 8 },
                  [perQueueTotal(s, 'rabbitmq.message.current', [stateIs('unacknowledged')])],
                  unit='short') + p.legend(),
   ]),
 
   p.row(13, 'Incoming Messages', 8, collapsed=true, panels=[
-    p.timeseries(14, 'Queue index writes / s', { h: 8, w: 12, x: 0, y: 9 },
+    p.timeseries(14,
+                 'Queue index writes / s',
+                 { h: 8, w: 12, x: 0, y: 9 },
                  [nodeSeries(s, 'rabbitmq.node.queue_index_write_count_details.rate')],
                  unit='short') + p.legend(),
-    p.timeseries(15, 'Queue index reads / s', { h: 8, w: 12, x: 12, y: 9 },
+    p.timeseries(15,
+                 'Queue index reads / s',
+                 { h: 8, w: 12, x: 12, y: 9 },
                  [nodeSeries(s, 'rabbitmq.node.queue_index_read_count_details.rate')],
                  unit='short') + p.legend(),
   ]),
 
   p.row(16, 'Queues', 9, collapsed=true, panels=[
-    p.timeseries(17, 'Queues created / s', { h: 7, w: 8, x: 0, y: 10 },
+    p.timeseries(17,
+                 'Queues created / s',
+                 { h: 7, w: 8, x: 0, y: 10 },
                  [nodeSeries(s, 'rabbitmq.node.queue_created_details.rate')],
                  unit='short') + p.legend(),
-    p.timeseries(18, 'Queues deleted / s', { h: 7, w: 8, x: 8, y: 10 },
+    p.timeseries(18,
+                 'Queues deleted / s',
+                 { h: 7, w: 8, x: 8, y: 10 },
                  [nodeSeries(s, 'rabbitmq.node.queue_deleted_details.rate')],
                  unit='short') + p.legend(),
-    p.timeseries(19, 'Queues declared / s', { h: 7, w: 8, x: 16, y: 10 },
+    p.timeseries(19,
+                 'Queues declared / s',
+                 { h: 7, w: 8, x: 16, y: 10 },
                  [nodeSeries(s, 'rabbitmq.node.queue_declared_details.rate')],
                  unit='short') + p.legend(),
   ]),
 
   p.row(20, 'Channels', 10, collapsed=true, panels=[
-    p.timeseries(21, 'Channels opened / s', { h: 7, w: 12, x: 0, y: 11 },
+    p.timeseries(21,
+                 'Channels opened / s',
+                 { h: 7, w: 12, x: 0, y: 11 },
                  [nodeSeries(s, 'rabbitmq.node.channel_created_details.rate')],
                  unit='short') + p.legend(),
-    p.timeseries(22, 'Channels closed / s', { h: 7, w: 12, x: 12, y: 11 },
+    p.timeseries(22,
+                 'Channels closed / s',
+                 { h: 7, w: 12, x: 12, y: 11 },
                  [nodeSeries(s, 'rabbitmq.node.channel_closed_details.rate')],
                  unit='short') + p.legend(),
   ]),
 
   p.row(23, 'Connections', 11, collapsed=true, panels=[
-    p.timeseries(24, 'Connections opened / s', { h: 7, w: 12, x: 0, y: 12 },
+    p.timeseries(24,
+                 'Connections opened / s',
+                 { h: 7, w: 12, x: 0, y: 12 },
                  [nodeSeries(s, 'rabbitmq.node.connection_created_details.rate')],
                  unit='short') + p.legend(),
-    p.timeseries(25, 'Connections closed / s', { h: 7, w: 12, x: 12, y: 12 },
+    p.timeseries(25,
+                 'Connections closed / s',
+                 { h: 7, w: 12, x: 12, y: 12 },
                  [nodeSeries(s, 'rabbitmq.node.connection_closed_details.rate')],
                  unit='short') + p.legend(),
   ]),

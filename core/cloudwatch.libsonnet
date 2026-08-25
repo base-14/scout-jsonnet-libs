@@ -11,9 +11,9 @@
 // after resource-vs-datapoint: reading Attributes['LoadBalancer'] is valid SQL
 // that returns empty. Dimension access therefore goes through dim(), the same
 // way sql.libsonnet routes plain attributes through dim()/attr().
-local ch = import 'sql.libsonnet';
 local manifest = import 'manifest.libsonnet';
 local p = import 'panels.libsonnet';
+local ch = import 'sql.libsonnet';
 
 {
   local cw = self,
