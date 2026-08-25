@@ -17,9 +17,10 @@ for scoping assets to an environment and — optionally — a tenant.
 
 **Pre-release (`0.x`). The API will change without deprecation cycles.**
 
-Current release: `v0.1.0` — core query builders and panel scaffolding, the
-identity contract with three built-in profiles, and the first three mixins.
-Pin the tag (or a commit SHA) rather than `main`:
+Current release: `v0.1.0` — core query builders and panel scaffolding
+(including the pre-aggregated APM span rollup), the identity contract with
+three built-in profiles, and the first three mixins. Pin the tag (or a commit
+SHA) rather than `main`:
 
 ```sh
 jb install github.com/base-14/scout-jsonnet-libs@v0.1.0
