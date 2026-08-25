@@ -220,6 +220,39 @@ local manifest = import 'manifest.libsonnet';
     } + (if sortBy != null then { sortBy: [{ displayName: sortBy, desc: true }] } else { sortBy: [] }),
   } + p.described(description),
 
+  // ---- presentation overlays ------------------------------------------------
+  //
+  // Merged onto a panel: `p.timeseries(...) + p.bars()`. Overlays rather than
+  // parameters so timeseries() keeps one canonical default and a panel states
+  // only its differences.
+
+  // Per-period statistics read as discrete bars; stacked, the bar height is
+  // the total and the split is visible within it.
+  bars(stacked=true):: {
+    fieldConfig+: { defaults+: { custom+: {
+      drawStyle: 'bars',
+      fillOpacity: 60,
+      gradientMode: 'hue',
+      lineInterpolation: 'smooth',
+      showPoints: 'never',
+      axisSoftMin: 0,
+    } + (if stacked then { stacking: { group: 'A', mode: 'normal' } } else {}) } },
+  },
+
+  // Count lines step rather than interpolate: the value is a per-period
+  // total, and a slope between buckets would draw measurements that never
+  // happened.
+  steps:: {
+    fieldConfig+: { defaults+: { custom+: {
+      lineInterpolation: 'stepAfter',
+      showPoints: 'never',
+    } } },
+  },
+
+  legend(displayMode='list', calcs=['lastNotNull']):: {
+    options+: { legend+: { displayMode: displayMode, calcs: calcs } },
+  },
+
   // A collapsible row header.
   //
   // Grafana stores a row's members in one of two places depending on its state:
