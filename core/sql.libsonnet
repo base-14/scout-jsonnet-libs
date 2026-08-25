@@ -186,7 +186,7 @@
 
   // Per-bucket, per-series increase of a cumulative counter, computed in SQL.
   //
-  // NOT $increase/$increaseColumns. Those are plugin macros expanded in Grafana,
+  // NOT $increase/$increaseColumns. Those are plugin macros expanded inside Scout,
   // and the datasource proxy passes SQL through unchanged, so their expansion is
   // invisible from here — we cannot test what they actually do. Measured against
   // a real panel, $increaseColumns draws a monotonically RISING line for a

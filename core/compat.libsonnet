@@ -1,9 +1,9 @@
 // Scout version -> the constants a render must match.
 //
 // A deployment declares exactly one version. schemaVersion, pluginVersion and
-// the resource apiVersions are Grafana's, so they follow from the Grafana
-// version a Scout release is built on rather than being three literals kept in
-// agreement by hand.
+// the resource apiVersions all follow from the upstream version a Scout
+// release is built on, rather than being three literals kept in agreement by
+// hand.
 //
 // Getting them wrong does not error. Scout normalises dashboards when it saves
 // them, so a render that disagrees produces a permanent diff against the server
@@ -13,7 +13,7 @@
 
   versions:: {
     '1.4': {
-      grafana: '12.4.3',
+      upstream: '12.4.3',
       schemaVersion: 42,
       pluginVersion: '12.4.3',
       apiVersions: {

@@ -1,8 +1,8 @@
-"""One declared version; every Grafana constant derived from it.
+"""One declared version; every derived constant follows from it.
 
 schemaVersion, pluginVersion and the resource apiVersions were three
-independent literals kept in agreement by hand. They are Grafana's, so they
-follow from the Grafana version a Scout release is built on.
+independent literals kept in agreement by hand. All of them follow from the
+upstream version a Scout release is built on.
 """
 
 from __future__ import annotations

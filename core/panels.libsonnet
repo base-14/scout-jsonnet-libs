@@ -255,7 +255,7 @@ local manifest = import 'manifest.libsonnet';
 
   // A collapsible row header.
   //
-  // Grafana stores a row's members in one of two places depending on its state:
+  // Scout stores a row's members in one of two places depending on its state:
   // a COLLAPSED row nests them inside its own `panels`, an EXPANDED row leaves
   // them as siblings that follow it in the dashboard's panel list. Get that
   // backwards and the panels vanish from the UI without any error. The caller

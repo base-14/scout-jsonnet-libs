@@ -3,8 +3,8 @@
 Jsonnet libraries for generating [base14 Scout](https://base14.io) dashboards and
 alerts as code.
 
-Scout is a Grafana-derived observability platform that stores OpenTelemetry
-telemetry in ClickHouse. Its dashboards, folders and alert rules are declarative
+Scout is an observability platform that stores OpenTelemetry telemetry in
+ClickHouse. Its dashboards, folders and alert rules are declarative
 resources, so they can be generated, reviewed in a pull request, and applied by
 CI rather than edited by hand in a UI.
 
@@ -27,7 +27,7 @@ jb install github.com/base-14/scout-jsonnet-libs@v0.1.0
 
 ## Why this exists
 
-Writing a Grafana dashboard by hand is easy. Writing four hundred of them, for
+Writing a Scout dashboard by hand is easy. Writing four hundred of them, for
 several environments, so that every query filters the right environment and none
 of them silently return nothing, is not. The failure mode that motivates this
 library is that **a wrong observability query does not raise an error** — it
@@ -73,7 +73,7 @@ jsonnet -J vendor your-render.jsonnet
 
 A dashboard is a plain object with a `build` function. It receives a scope —
 which supplies the environment predicate and any template variables — and
-returns a Grafana dashboard.
+returns a Scout dashboard.
 
 ```jsonnet
 local p = import 'github.com/base-14/scout-jsonnet-libs/core/panels.libsonnet';
@@ -204,9 +204,8 @@ happens to lack a predicate.
 
 ## Compatibility
 
-Scout releases are built on a specific Grafana version, which fixes the
-dashboard `schemaVersion`, the plugin version, and the resource API versions a
-render must emit. Getting them wrong does not error — Scout normalises on save,
+Each Scout release fixes the dashboard `schemaVersion`, the plugin version,
+and the resource API versions a render must emit. Getting them wrong does not error — Scout normalises on save,
 so a mismatched render produces a permanent diff against the server on every
 asset.
 
