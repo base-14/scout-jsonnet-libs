@@ -18,7 +18,7 @@ for scoping assets to an environment and — optionally — a tenant.
 **Pre-release (`0.x`). The API will change without deprecation cycles.**
 
 Not yet published to a tag; consume it from a local checkout or a commit SHA
-until `v0.1.0` lands. The `mixins/` layer is scaffolded but empty.
+until `v0.1.0` lands.
 
 ## Why this exists
 
@@ -119,11 +119,29 @@ has a tenant dimension or not.
 |---|---|
 | `core/` | Query builders, panel scaffolding, the resource envelope, naming. No opinion on how environments are identified. |
 | `identity/` | Scope modes and identity profiles. |
-| `mixins/` | Parameterised asset bundles (empty today). |
+| `mixins/` | Ready-made asset bundles — see the index below. |
 
 Dependencies run strictly downward. Mixins never import one another, and a mixin
 reaches the environment predicate only through the identity contract — so a
 mixin written against one deployment model works under another.
+
+### The modules
+
+Everything importable, and what each piece is for:
+
+| Module | Provides |
+|---|---|
+| `core/sql.libsonnet` | ClickHouse query builders over the OTel schema: attribute placement, counter deltas/rates, predicates. The layer where silent-empty-result mistakes are prevented. |
+| `core/panels.libsonnet` | Dashboard, timeseries, stat and row scaffolding matched to what Scout stores on save, plus presentation overlays (`bars`, `steps`, `legend`). |
+| `core/cloudwatch.libsonnet` | CloudWatch metric-stream access: the JSON-encoded `Dimensions` attribute, stream panel targets, dimension dropdowns. Shared by the AWS mixins. |
+| `core/manifest.libsonnet` | Scout resource manifests, and the one home of Scout's wire identifiers. |
+| `core/naming.libsonnet` | Deterministic uids, titles and folder placement — what makes push idempotent and diffs readable. |
+| `core/alerts.libsonnet` | Alert rule construction (authoring shape not yet verified against a live server — see the file header). |
+| `core/compat.libsonnet` | Scout version → the schema/plugin/API constants a render must emit. |
+| `core/overlay.libsonnet` | The preview overlay: rewrites folders, uids and contact points so local and CI previews cannot touch real assets or page real contact points. |
+| `identity/scopes.libsonnet` | The `scoped` / `browse` / `global` scope constructors. |
+| `identity/resolve.libsonnet` | Config → instance matrix: which (tenant, environment) lands on which target, database and datasource. |
+| `identity/profiles/` | Built-in identity profiles and the contract a custom one implements. |
 
 ### Identity profiles
 
@@ -140,6 +158,33 @@ environment, and which expression distinguishes one series from another.
 A deployment whose scheme matches none of these can supply its own object
 implementing the same contract. `tests/test_identity_conformance.py` is exported
 for exactly that purpose — run it against your profile.
+
+### Mixins
+
+A mixin is a ready-made asset bundle: import it, hand its dashboards a scope,
+render. Each exports the same contract — `name`, `requires()`, `dashboards()`,
+`alerts()` — and works under any identity profile, because scoping only ever
+comes from the scope you pass in.
+
+| Mixin | Covers | Telemetry source |
+|---|---|---|
+| `mixins/aws_elb.libsonnet` | AWS Application ELB: hosts, response codes, requests, connections, latency | CloudWatch metric stream |
+| `mixins/aws_rds.libsonnet` | AWS RDS / Aurora: latencies, lags, IOPS, storage, memory, CPU, DB load | CloudWatch metric stream |
+| `mixins/rabbitmq.libsonnet` | RabbitMQ: queue depths, consumers, per-node memory/disk, queue/channel/connection churn | OTel `rabbitmq` receiver |
+
+```jsonnet
+local elb = import 'github.com/base-14/scout-jsonnet-libs/mixins/aws_elb.libsonnet';
+
+// Check elb.requires().metrics against what your deployment records first —
+// the difference between "these panels will be empty" and finding out later.
+[t.build({ scope: myScope }) for t in elb.dashboards()]
+```
+
+These are ports of dashboards that ran against live deployments, with their
+hand-written scoping replaced by the identity contract and their silent bugs
+(contradictory predicates, mislabelled units, filters that excluded the rows a
+panel was built to show) fixed rather than copied — each mixin's header comment
+lists exactly what was corrected and why.
 
 ### Scope modes
 
