@@ -17,13 +17,14 @@ for scoping assets to an environment and — optionally — a tenant.
 
 **Pre-release (`0.x`). The API will change without deprecation cycles.**
 
-Current release: `v0.1.0` — core query builders and panel scaffolding
+Current release: `v0.2.0` — derived-identity scope, scope-carried CloudWatch
+ServiceName scheme, and requires()-driven target pruning
 (including the pre-aggregated APM span rollup), the identity contract with
 three built-in profiles, and the first three mixins. Pin the tag (or a commit
 SHA) rather than `main`:
 
 ```sh
-jb install github.com/base-14/scout-jsonnet-libs@v0.1.0
+jb install github.com/base-14/scout-jsonnet-libs@v0.2.0
 ```
 
 ## Why this exists
@@ -146,6 +147,7 @@ Everything importable, and what each piece is for:
 | `core/compat.libsonnet` | Scout version → the schema/plugin/API constants a render must emit. |
 | `core/overlay.libsonnet` | The preview overlay: rewrites folders, uids and contact points so local and CI previews cannot touch real assets or page real contact points. |
 | `identity/scopes.libsonnet` | The `scoped` / `browse` / `global` scope constructors. |
+| `identity/derived.libsonnet` | The derived scope: an identity axis extracted from resource names, for telemetry that carries no identity attributes. |
 | `identity/resolve.libsonnet` | Config → instance matrix: which (tenant, environment) lands on which target, database and datasource. |
 | `identity/profiles/` | Built-in identity profiles and the contract a custom one implements. |
 
