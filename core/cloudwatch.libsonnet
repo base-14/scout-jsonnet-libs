@@ -23,6 +23,18 @@ local ch = import 'sql.libsonnet';
   // prune on it before touching the metric name.
   streamServiceName:: 'aws-cloudwatch-stream',
 
+  // How this deployment's collector tags stream metrics. The scope may carry
+  // `cloudwatchService`: a literal ServiceName, or the reserved word
+  // 'namespace' meaning the metric's own namespace —
+  // amazonaws.com/AWS/RDS/CPUUtilization -> 'AWS/RDS'. Absent, the default
+  // collector name above stands. Carried on the scope rather than configured
+  // here so mixins need no per-deployment edits.
+  serviceNameFor(s, metric)::
+    local declared = std.get(s, 'cloudwatchService', cw.streamServiceName);
+    if declared == 'namespace'
+    then std.join('/', std.split(metric, '/')[1:3])
+    else declared,
+
   // Stream metric names are prefixed with the provider and namespace:
   // amazonaws.com/AWS/ApplicationELB/RequestCount.
   metricName(namespace, metric):: 'amazonaws.com/' + namespace + '/' + metric,
@@ -66,7 +78,7 @@ local ch = import 'sql.libsonnet';
         metric,
         valueExpr,
         'value',
-        ch.metricPredicates(metric, cw.streamServiceName)
+        ch.metricPredicates(metric, cw.serviceNameFor(s, metric))
         + [s.envPredicate]
         + extraPredicates,
         groupBy=[keyExpr + ' AS series'],
@@ -97,7 +109,7 @@ local ch = import 'sql.libsonnet';
       ch.from(s.database, ch.tables.summary),
       ch.where(
         [ch.variableWindow]
-        + ch.metricPredicates(probeMetric, cw.streamServiceName)
+        + ch.metricPredicates(probeMetric, cw.serviceNameFor(s, probeMetric))
         + [cw.hasDim(dimName), s.envPredicate]
       ),
       'ORDER BY ' + varName,
