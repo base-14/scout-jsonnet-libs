@@ -79,4 +79,29 @@ local naming = import 'naming.libsonnet';
         ],
       },
     },
+
+  // requires()'s other half. A mixin declares the metrics its panels query; a
+  // deployment that lacks some of them (a load balancer type that never emits
+  // Grpc counters, an engine without ephemeral storage) prunes those targets
+  // here instead of shipping permanently-empty panels. Applies to the BUILT
+  // dashboard object, before it is wrapped in a manifest.
+  //
+  // absentMetrics are full metric names; matching is on the quoted name so a
+  // prefix cannot prune its longer siblings. Panels without a targets field
+  // (rows) pass through; a panel whose every target is pruned is dropped.
+  pruneTargets(doc, absentMetrics)::
+    local mentions(query) = std.any([
+      std.length(std.findSubstr("'" + m + "'", query)) > 0
+      for m in absentMetrics
+    ] + [false]);
+    local pruned(p) =
+      if !std.objectHas(p, 'targets') then p
+      else p { targets: [t for t in p.targets if !mentions(t.query)] };
+    doc {
+      panels: [
+        pruned(p)
+        for p in doc.panels
+        if !std.objectHas(p, 'targets') || std.length(pruned(p).targets) > 0
+      ],
+    },
 }
