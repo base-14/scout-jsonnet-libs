@@ -360,6 +360,13 @@
   ]) + '\n',
 
   // An instant (non-time-series) aggregate, which is what an alert rule reduces.
+  // The UNION ALL sentinel keeps the response non-empty: a zero-row table
+  // from this datasource is a frame Grafana's expression engine cannot type
+  // ("[sse.readDataError] input data must be a wide series but got type not",
+  // measured 2026-08-31), so a count-style alert whose window is quiet flaps
+  // to health=error instead of evaluating a clean zero. The sentinel is one
+  // baseline instance per rule — value 0, labels '__none__' — which can never
+  // cross a threshold.
   instantQuery(database, table, valueExpr, alias, predicates, groupBy=[]):: std.join('\n', [
     'SELECT ' + valueExpr + ' AS ' + alias
     + (if std.length(groupBy) > 0 then ', ' + std.join(', ', groupBy) else ''),
@@ -367,7 +374,10 @@
     ch.where(['$timeFilter'] + predicates),
   ] + (
     if std.length(groupBy) > 0 then ['GROUP BY ' + std.join(', ', [ch.aliasOf(g) for g in groupBy])] else []
-  )) + '\n',
+  ) + [
+    'UNION ALL SELECT 0'
+    + std.join('', [", '__none__'" for g in groupBy]),
+  ]) + '\n',
 
   // `expr AS alias` -> `alias`, for reuse in GROUP BY.
   aliasOf(sel)::
