@@ -64,6 +64,10 @@ local manifest = import 'manifest.libsonnet';
   },
 
   // `op` is 'gt' or 'lt'.
+  // `threshold` is one number for gt/lt, or [low, high] for the range
+  // evaluators (within_range / outside_range) — Grafana's evaluator params
+  // are a list either way. Banded severities (minor 1-5, major 5-10,
+  // critical >=10) are three rules whose ranges cannot overlap-fire.
   thresholdStage(threshold, op='gt'):: {
     refId: a.thresholdRefId,
     datasourceUid: manifest.expressionDatasourceUid,
@@ -74,7 +78,7 @@ local manifest = import 'manifest.libsonnet';
       datasource: { type: manifest.expressionDatasourceUid, uid: manifest.expressionDatasourceUid },
       expression: a.reduceRefId,
       conditions: [{
-        evaluator: { type: op, params: [threshold] },
+        evaluator: { type: op, params: if std.isArray(threshold) then threshold else [threshold] },
         operator: { type: 'and' },
         query: { params: [a.reduceRefId] },
         reducer: { type: 'last', params: [] },
