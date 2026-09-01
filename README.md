@@ -17,7 +17,8 @@ for scoping assets to an environment and — optionally — a tenant.
 
 **Pre-release (`0.x`). The API will change without deprecation cycles.**
 
-Current release: `v0.2.2` — zero-row sentinel for instant alert queries,
+Current release: `v0.2.3` — pruneTargets made 25x faster (native containment,
+single-pass fold), plus the v0.2.2 zero-row sentinel for instant alert queries,
 range threshold evaluators for banded-severity
 alert rules, plus the v0.2.0 derived-identity scope, scope-carried CloudWatch
 ServiceName scheme, and requires()-driven target pruning
@@ -26,7 +27,7 @@ three built-in profiles, and the first three mixins. Pin the tag (or a commit
 SHA) rather than `main`:
 
 ```sh
-jb install github.com/base-14/scout-jsonnet-libs@v0.2.2
+jb install github.com/base-14/scout-jsonnet-libs@v0.2.3
 ```
 
 ## Why this exists

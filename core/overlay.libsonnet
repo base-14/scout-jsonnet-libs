@@ -90,18 +90,24 @@ local naming = import 'naming.libsonnet';
   // prefix cannot prune its longer siblings. Panels without a targets field
   // (rows) pass through; a panel whose every target is pruned is dropped.
   pruneTargets(doc, absentMetrics)::
+    // strReplace, not findSubstr: go-jsonnet interprets findSubstr in
+    // jsonnet itself, and over kilobyte query strings x targets x metrics it
+    // alone cost ~12s of a 13s render (measured 2026-09-01). strReplace is a
+    // native builtin; "replacing the needle changes the string" is the same
+    // containment test.
     local mentions(query) = std.any([
-      std.length(std.findSubstr("'" + m + "'", query)) > 0
+      std.strReplace(query, "'" + m + "'", '') != query
       for m in absentMetrics
     ] + [false]);
-    local pruned(p) =
-      if !std.objectHas(p, 'targets') then p
-      else p { targets: [t for t in p.targets if !mentions(t.query)] };
     doc {
-      panels: [
-        pruned(p)
-        for p in doc.panels
-        if !std.objectHas(p, 'targets') || std.length(pruned(p).targets) > 0
-      ],
+      panels: std.foldl(
+        function(acc, p)
+          if !std.objectHas(p, 'targets') then acc + [p]
+          else
+            local kept = [t for t in p.targets if !mentions(t.query)];
+            if std.length(kept) > 0 then acc + [p { targets: kept }] else acc,
+        doc.panels,
+        [],
+      ),
     },
 }
