@@ -386,6 +386,41 @@
     'ORDER BY t',
   ]) + '\n',
 
+  // The counter equivalent of alertSeriesQuery: per-bucket INCREASE of a
+  // cumulative counter, grouped by label columns, as wide time series.
+  //
+  // Same correctness rules as counterDeltaQuery, which this adapts to the
+  // alert shape: the delta is taken per service instance BEFORE summing
+  // across the label set (a restarting container must not corrupt the
+  // total), each instance's first bucket is dropped (its lag is the
+  // counter's lifetime), and resets clamp to zero. Labels are separate
+  // columns — the datasource carries string columns through as frame
+  // labels, so each label set becomes one alert instance.
+  alertCounterSeriesQuery(database, table, labelCols, alias, predicates, bucketSeconds=300):: std.join('\n', [
+    'SELECT t' + std.join('', [', ' + ch.aliasOf(l) for l in labelCols]) + ', sum(d) AS ' + alias,
+    'FROM (',
+    '  SELECT t' + std.join('', [', ' + ch.aliasOf(l) for l in labelCols]) + ', instance,',
+    '    greatest(v - lagInFrame(v) OVER (PARTITION BY '
+    + std.join(', ', [ch.aliasOf(l) for l in labelCols])
+    + ', instance ORDER BY t), 0) AS d,',
+    '    row_number() OVER (PARTITION BY '
+    + std.join(', ', [ch.aliasOf(l) for l in labelCols])
+    + ', instance ORDER BY t) AS rn',
+    '  FROM (',
+    '    SELECT ' + ch.alertBucketMs(bucketSeconds) + ' AS t,',
+    '      ' + std.join(',\n      ', labelCols) + ',',
+    "      ResourceAttributes['service.instance.id'] AS instance,",
+    '      anyLast(Value) AS v',
+    '    ' + ch.from(database, table),
+    '    ' + ch.where(['$timeFilter'] + predicates),
+    '    GROUP BY t' + std.join('', [', ' + ch.aliasOf(l) for l in labelCols]) + ', instance',
+    '  )',
+    ')',
+    'WHERE rn > 1',
+    'GROUP BY t' + std.join('', [', ' + ch.aliasOf(l) for l in labelCols]),
+    'ORDER BY t',
+  ]) + '\n',
+
   // An instant (non-time-series) aggregate, which is what an alert rule reduces.
   // The UNION ALL sentinel keeps the response non-empty: a zero-row table
   // from this datasource is a frame Grafana's expression engine cannot type
