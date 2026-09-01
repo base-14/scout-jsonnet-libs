@@ -359,6 +359,33 @@
     'ORDER BY t',
   ]) + '\n',
 
+  // A time-series aggregate for MULTI-DIMENSIONAL alert rules.
+  //
+  // Grafana's expression engine ingests alert query responses as wide time
+  // series; a label-bearing TABLE response is a frame it cannot type
+  // ("[sse.readDataError] input data must be a wide series but got type not",
+  // measured 2026-08-31 — intermittently, since some responses happened to
+  // convert). So a rule with a group-by axis queries buckets: the plugin
+  // turns (t, label, value) rows into one series per label, reduce acts per
+  // series, and the rule fires one alert instance per label set.
+  //
+  // Buckets are hand-rolled at a FIXED width, not $timeSeries: the macro's
+  // width comes from the panel/alert context and an alert must not change
+  // meaning with it. This trades SignalFx's sliding windows for fixed ones —
+  // pair it with a rule window of 2x the bucket and a `max` reducer so a
+  // threshold crossing is seen whichever bucket boundary it straddles.
+  alertBucketMs(seconds):: 'toUnixTimestamp(intDiv(toUInt32(TimeUnix), %(s)d) * %(s)d) * 1000' % { s: seconds },
+
+  alertSeriesQuery(database, table, valueExpr, alias, predicates, groupBy=[], bucketSeconds=300):: std.join('\n', [
+    'SELECT ' + ch.alertBucketMs(bucketSeconds) + ' AS t'
+    + (if std.length(groupBy) > 0 then ', ' + std.join(', ', groupBy) else '')
+    + ', ' + valueExpr + ' AS ' + alias,
+    ch.from(database, table),
+    ch.where(['$timeFilter'] + predicates),
+    'GROUP BY t' + (if std.length(groupBy) > 0 then ', ' + std.join(', ', [ch.aliasOf(g) for g in groupBy]) else ''),
+    'ORDER BY t',
+  ]) + '\n',
+
   // An instant (non-time-series) aggregate, which is what an alert rule reduces.
   // The UNION ALL sentinel keeps the response non-empty: a zero-row table
   // from this datasource is a frame Grafana's expression engine cannot type

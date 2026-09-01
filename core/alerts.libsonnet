@@ -29,7 +29,7 @@ local manifest = import 'manifest.libsonnet';
   thresholdRefId:: 'C',
 
   // A rule's query stage. `relativeTimeRange` is the window the query sees.
-  queryStage(datasourceUid, database, table, sql, windowSeconds=600):: {
+  queryStage(datasourceUid, database, table, sql, windowSeconds=600, format='table'):: {
     refId: a.queryRefId,
     datasourceUid: datasourceUid,
     relativeTimeRange: { from: windowSeconds, to: 0 },
@@ -39,7 +39,7 @@ local manifest = import 'manifest.libsonnet';
       database: database,
       table: table,
       query: sql,
-      format: 'table',
+      format: format,
       dateTimeColDataType: 'TimeUnix',
       dateTimeType: 'DATETIME64',
       editorMode: 'sql',
@@ -103,6 +103,8 @@ local manifest = import 'manifest.libsonnet';
       annotations: {},
       contactPoint: null,
       groupBy: [],
+      // 'time_series' for multi-dimensional rules — see alertSeriesQuery.
+      format: 'table',
     } + opts;
     {
       uid: uid,
@@ -110,7 +112,7 @@ local manifest = import 'manifest.libsonnet';
       folderUID: folderUid,
       condition: a.thresholdRefId,
       data: [
-        a.queryStage(datasourceUid, database, table, sql, o.windowSeconds),
+        a.queryStage(datasourceUid, database, table, sql, o.windowSeconds, o.format),
         a.reduceStage(o.reducer),
         a.thresholdStage(threshold, o.op),
       ],
