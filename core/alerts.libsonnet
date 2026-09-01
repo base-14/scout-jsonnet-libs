@@ -105,6 +105,11 @@ local manifest = import 'manifest.libsonnet';
       groupBy: [],
       // 'time_series' for multi-dimensional rules — see alertSeriesQuery.
       format: 'table',
+      // 'OK' is for rules over series that only EXIST after their first
+      // event (a failure counter nobody has tripped): there, no data is
+      // quiet-normal, not a broken query. Declared per rule with a reason in
+      // the template — the default stays NoData-is-failure.
+      noDataState: 'NoData',
     } + opts;
     {
       uid: uid,
@@ -116,7 +121,7 @@ local manifest = import 'manifest.libsonnet';
         a.reduceStage(o.reducer),
         a.thresholdStage(threshold, o.op),
       ],
-      noDataState: 'NoData',
+      noDataState: o.noDataState,
       execErrState: 'Error',
       'for': a.duration(o.forSeconds),
       labels: o.labels,
