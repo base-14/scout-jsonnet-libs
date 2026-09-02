@@ -441,6 +441,24 @@
     + std.join('', [", '__none__'" for g in groupBy]),
   ]) + '\n',
 
+  // Freshness as a wide TIME SERIES: seconds since the last datapoint per
+  // label set, stamped on a single "now" bucket. The table-format variant
+  // (instantQuery) breaks the SSE reader once more than one string column
+  // rides along — time_series carries any number of label columns as frame
+  // labels, so absence detectors with multi-part identity use this form.
+  // The sentinel series pins the frame when nothing matches; its lag of 0
+  // never crosses a gt threshold.
+  freshnessSeriesQuery(database, table, predicates, groupBy=[], alias='lag_seconds'):: std.join('\n', [
+    'SELECT toUnixTimestamp(toStartOfMinute(now())) * 1000 AS t'
+    + (if std.length(groupBy) > 0 then ', ' + std.join(', ', groupBy) else '')
+    + ", dateDiff('second', max(TimeUnix), now()) AS " + alias,
+    ch.from(database, table),
+    ch.where(['$timeFilter'] + predicates),
+    'GROUP BY t' + (if std.length(groupBy) > 0 then ', ' + std.join(', ', [ch.aliasOf(g) for g in groupBy]) else ''),
+    'UNION ALL SELECT toUnixTimestamp(toStartOfMinute(now())) * 1000'
+    + std.join('', [", '__none__'" for g in groupBy]) + ', 0',
+  ]) + '\n',
+
   // `expr AS alias` -> `alias`, for reuse in GROUP BY.
   aliasOf(sel)::
     local hits = std.findSubstr(' AS ', sel);
