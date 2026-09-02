@@ -448,16 +448,29 @@
   // labels, so absence detectors with multi-part identity use this form.
   // The sentinel series pins the frame when nothing matches; its lag of 0
   // never crosses a gt threshold.
-  freshnessSeriesQuery(database, table, predicates, groupBy=[], alias='lag_seconds'):: std.join('\n', [
-    'SELECT toUnixTimestamp(toStartOfMinute(now())) * 1000 AS t'
-    + (if std.length(groupBy) > 0 then ', ' + std.join(', ', groupBy) else '')
-    + ", dateDiff('second', max(TimeUnix), now()) AS " + alias,
-    ch.from(database, table),
-    ch.where(['$timeFilter'] + predicates),
-    'GROUP BY t' + (if std.length(groupBy) > 0 then ', ' + std.join(', ', [ch.aliasOf(g) for g in groupBy]) else ''),
-    'UNION ALL SELECT toUnixTimestamp(toStartOfMinute(now())) * 1000'
-    + std.join('', [", '__none__'" for g in groupBy]) + ', 0',
-  ]) + '\n',
+  freshnessSeriesQuery(database, table, predicates, groupBy=[], alias='lag_seconds')::
+    if std.length(groupBy) == 0 then
+      // Ungrouped: a plain aggregate always returns exactly ONE row, even
+      // over zero input rows — so no sentinel is needed (a sentinel here
+      // would duplicate the series' empty label set, which the rule engine
+      // rejects). max() over nothing is NULL; coalescing to epoch turns
+      // total silence into a huge lag, which is the correct alarm.
+      std.join('\n', [
+        'SELECT toUnixTimestamp(toStartOfMinute(now())) * 1000 AS t'
+        + ", dateDiff('second', coalesce(max(TimeUnix), toDateTime64(0, 9)), now()) AS " + alias,
+        ch.from(database, table),
+        ch.where(['$timeFilter'] + predicates),
+      ]) + '\n'
+    else std.join('\n', [
+      'SELECT toUnixTimestamp(toStartOfMinute(now())) * 1000 AS t'
+      + ', ' + std.join(', ', groupBy)
+      + ", dateDiff('second', max(TimeUnix), now()) AS " + alias,
+      ch.from(database, table),
+      ch.where(['$timeFilter'] + predicates),
+      'GROUP BY t, ' + std.join(', ', [ch.aliasOf(g) for g in groupBy]),
+      'UNION ALL SELECT toUnixTimestamp(toStartOfMinute(now())) * 1000'
+      + std.join('', [", '__none__'" for g in groupBy]) + ', 0',
+    ]) + '\n',
 
   // `expr AS alias` -> `alias`, for reuse in GROUP BY.
   aliasOf(sel)::

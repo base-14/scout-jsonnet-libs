@@ -31,7 +31,12 @@ def test_sentinel_matches_column_count():
     assert sql.strip().endswith("UNION ALL SELECT toUnixTimestamp(toStartOfMinute(now())) * 1000, '__none__', '__none__', 0")
 
 
-def test_no_groups_still_shaped():
+def test_no_groups_is_single_row_without_sentinel():
+    """Ungrouped aggregates return one row even over zero input, so a
+    sentinel would DUPLICATE the empty label set — the rule engine rejects
+    'duplicate results with labels {}'. Silence coalesces to epoch, i.e. a
+    huge lag that fires."""
     sql = _render("[]")
-    assert "GROUP BY t\n" in sql
-    assert sql.strip().endswith("UNION ALL SELECT toUnixTimestamp(toStartOfMinute(now())) * 1000, 0")
+    assert "UNION ALL" not in sql
+    assert "GROUP BY" not in sql
+    assert "coalesce(max(TimeUnix), toDateTime64(0, 9))" in sql
