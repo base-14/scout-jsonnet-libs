@@ -615,10 +615,13 @@
   // A pre-aggregated span rollup. Everything above this line targets the raw
   // OTel schema; this table differs in three ways, and each one is load-bearing.
   //
-  //   1. Every dimension is a FLAT COLUMN — Environment, ServiceName, SpanName,
-  //      HttpStatusCode, Endpoint, DbName, NetPeerName. There is no
-  //      ResourceAttributes or Attributes map, so ch.dim()'s resource-vs-datapoint
-  //      routing has nothing to route and must not be used here.
+  //   1. Every dimension is a FLAT COLUMN — Environment, ServiceName, SpanKind,
+  //      SpanName, HttpRoute, HttpStatusCode (the rollup was slimmed in 2026-09:
+  //      HttpMethod, Endpoint, DbName, DbSystem, DbOperation and NetPeerName no
+  //      longer exist, and one dead identifier fails the whole query). There is
+  //      no ResourceAttributes or Attributes map, so ch.dim()'s
+  //      resource-vs-datapoint routing has nothing to route and must not be
+  //      used here.
   //   2. The measures are aggregate STATES, not values: SpanCount is an
   //      AggregateFunction(count), ErrorCount a countIf state, DurationQuantiles a
   //      quantilesTDigest state. They have to be read through their matching
@@ -759,7 +762,11 @@
   //
   // ' | ' rather than seriesKey's ' / ', which is a legend convention some tools
   // use and is kept here so a migrated panel reads identically.
-  apmSeriesKeyCols:: ['ServiceName', 'SpanKind', 'HttpMethod', 'SpanName'],
+  // HttpRoute, not HttpMethod: the rollup slimming (see the contract note
+  // above) removed HttpMethod, and one dead identifier fails the whole panel
+  // query. HTTP server SpanNames still carry the method ('GET /path'), so
+  // the legend loses nothing.
+  apmSeriesKeyCols:: ['ServiceName', 'SpanKind', 'HttpRoute', 'SpanName'],
 
   apmSeriesKey:: 'concat(' + std.join(", ' | ', ", ch.apmSeriesKeyCols) + ')',
 
