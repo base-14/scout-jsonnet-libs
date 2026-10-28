@@ -195,14 +195,22 @@
   // mostly zero with occasional small increments, not a smooth ramp.
   //
   // Three details carry the correctness:
-  //   1. The delta is per INSTANCE, taken before summing across the series key.
-  //      Differencing an already-summed series lets one container restarting
-  //      corrupt the total into a plausible-looking line.
+  //   1. The delta is per STORED SERIES (ch.storedSeries), taken before summing
+  //      across the series key. Differencing an already-summed series lets one
+  //      container restarting corrupt the total into a plausible-looking line.
   //   2. `rn > 1` drops each series' first bucket. lagInFrame returns 0 there,
   //      so the first delta would otherwise be the counter's whole lifetime
   //      total — a spike at the left edge of every panel.
   //   3. greatest(..., 0) clamps the negative delta a counter reset produces.
   //      A restart should read as a gap, not as a negative count.
+  // One stored series of a metric: the instance that emits it AND the datapoint
+  // attributes that tell its series apart. An instance can carry several series
+  // of one counter (one per downstream provider, status code, worker); taking
+  // anyLast across them and differencing the result subtracts one series from
+  // another, so a counter at 15 followed by one at 100015 reads as 100000 new
+  // events. Every lagged delta below partitions by it.
+  storedSeries:: "cityHash64(ResourceAttributes['service.instance.id'], Attributes)",
+
   // The same delta as a per-second rate. Divides by the pinned bucket width
   // rather than by the gap between bucket timestamps, because `t` carries a
   // different unit depending on how $timeSeries is bound and a silently wrong
@@ -261,7 +269,7 @@
     '    FROM (',
     '      SELECT $timeSeries AS t,',
     '        ' + keyExpr + ' AS series,',
-    "        ResourceAttributes['service.instance.id'] AS instance,",
+    '        ' + ch.storedSeries + ' AS instance,',
     '        anyLast(' + valueCol + ') AS v',
     '      ' + ch.from(database, table),
     '      ' + ch.where(['$timeFilter'] + predicates),
@@ -327,9 +335,10 @@
   // Not expressible with macros: $rate(sum(Sum)) / $rate(sum(Count)) would need
   // two macros in one query. Two constraints shape the SQL:
   //
-  //   1. The delta is taken PER INSTANCE, before aggregating. Differencing an
-  //      already-summed series mixes unrelated counters, and one container
-  //      restarting corrupts the ratio into a line that still looks plausible.
+  //   1. The delta is taken PER STORED SERIES (ch.storedSeries), before
+  //      aggregating. Differencing an already-summed series mixes unrelated
+  //      counters, and one container restarting corrupts the ratio into a
+  //      line that still looks plausible.
   //   2. It lags across buckets rather than using max-min within one. At a
   //      1-minute scrape and defaultStep 1m there is a single sample per
   //      instance per bucket, so max-min is always zero.
@@ -345,7 +354,7 @@
     '  FROM (',
     '    SELECT $timeSeries AS t,',
     '      ' + keyExpr + ' AS series,',
-    "      ResourceAttributes['service.instance.id'] AS instance,",
+    '      ' + ch.storedSeries + ' AS instance,',
     '      anyLast(Sum) AS s,',
     '      anyLast(Count) AS c',
     '    ' + ch.from(database, table),
@@ -390,7 +399,7 @@
   // cumulative counter, grouped by label columns, as wide time series.
   //
   // Same correctness rules as counterDeltaQuery, which this adapts to the
-  // alert shape: the delta is taken per service instance BEFORE summing
+  // alert shape: the delta is taken per stored series BEFORE summing
   // across the label set (a restarting container must not corrupt the
   // total), each instance's first bucket is dropped (its lag is the
   // counter's lifetime), and resets clamp to zero. Labels are separate
@@ -409,7 +418,7 @@
     '  FROM (',
     '    SELECT ' + ch.alertBucketMs(bucketSeconds) + ' AS t,',
     '      ' + std.join(',\n      ', labelCols) + ',',
-    "      ResourceAttributes['service.instance.id'] AS instance,",
+    '      ' + ch.storedSeries + ' AS instance,',
     '      anyLast(Value) AS v',
     '    ' + ch.from(database, table),
     '    ' + ch.where(['$timeFilter'] + predicates),
