@@ -17,7 +17,10 @@ for scoping assets to an environment and — optionally — a tenant.
 
 **Pre-release (`0.x`). The API will change without deprecation cycles.**
 
-Current release: `v0.3.2` — declarable noDataState, counter-delta alert series, time-series alert queries for multi-dimensional
+Current release: `v0.3.6` — counter deltas taken per stored series (instance and
+datapoint attributes), freshnessSeriesQuery absence detection as wide time series,
+the APM series key on the slimmed span rollup, plus the v0.3.2
+declarable noDataState, counter-delta alert series, time-series alert queries for multi-dimensional
 rules (alertSeriesQuery + per-rule response format), pruneTargets made 25x faster (native containment,
 single-pass fold), plus the v0.2.2 zero-row sentinel for instant alert queries,
 range threshold evaluators for banded-severity

@@ -196,3 +196,33 @@ def test_summary_average_discards_counter_resets():
         f"\"ResourceAttributes['environment']\", 'avg_seconds', {SUMMARY_PREDS})"
     )
     assert "WHERE d_count > 0" in q
+
+
+# One instance can carry several series of one counter, told apart only by a
+# datapoint attribute (a downstream provider, a status code, a worker). Taking
+# anyLast over them and differencing the result subtracts one series from
+# another: a counter at 15 followed by one at 100015 reads as 100000 new events.
+COUNTER_PREDS = "[\"MetricName = 'jobs_total'\"]"
+STORED_SERIES = "cityHash64(ResourceAttributes['service.instance.id'], Attributes) AS instance"
+
+
+def test_alert_counter_delta_is_per_stored_series_not_per_instance():
+    q = sql("ch.alertCounterSeriesQuery('app', 'otel_metrics_sum', "
+            f"[\"ResourceAttributes['tenant'] AS tenant\"], 'jobs', {COUNTER_PREDS})")
+    assert STORED_SERIES in q
+    assert "PARTITION BY tenant, instance ORDER BY t" in q
+
+
+def test_counter_delta_is_per_stored_series_not_per_instance():
+    q = sql("ch.counterDeltaQuery('app', 'otel_metrics_sum', "
+            f"\"ResourceAttributes['tenant']\", 'jobs', {COUNTER_PREDS})")
+    assert STORED_SERIES in q
+    assert "PARTITION BY series, instance ORDER BY t" in q
+
+
+def test_summary_average_is_per_stored_series_not_per_instance():
+    q = sql(
+        "ch.summaryAverageQuery('app_stg', 'otel_metrics_summary', "
+        f"\"ResourceAttributes['environment']\", 'avg_seconds', {SUMMARY_PREDS})"
+    )
+    assert STORED_SERIES in q
